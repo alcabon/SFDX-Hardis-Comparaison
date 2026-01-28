@@ -733,7 +733,7 @@ flowchart TB
         GS_PR[PR Created]
         GS_WEBHOOK[Gearset Webhook]
         GS_COMPARE[Metadata Comparison]
-        GS_ANALYZERS[Problem Analyzers<br/>40+ Analyzers]
+        GS_ANALYZERS[Problem Analyzers<br/>100+ Analyzers]
         GS_SUGGEST[Suggest Fixes<br/>Add/Remove Items]
         GS_AUTO[Auto-Apply Fixes<br/>if configured]
         GS_VALIDATE[Salesforce Validation]
@@ -1405,7 +1405,7 @@ Both sfdx-hardis and Gearset provide robust GitOps solutions for Salesforce CI/C
 | Team GitHub skills | Strong | Mixed |
 | Customization needs | High | Standard |
 | **Validation approach** | **Post-error tips + pre-commit cleaning** | **Pre-deployment analyzers + auto-fix** |
-| **Problem detection** | **100+ error patterns** | **40+ specialized analyzers** |
+| **Problem detection** | **100+ error patterns** | **100+ specialized analyzers** |
 | **Auto-correction** | **YAML-configured cleaning** | **UI checkbox selection** |
 
 ### Key Validation Differences Summary:

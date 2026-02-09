@@ -247,3 +247,82 @@ The **Back-Propagation (Retrofit)** via `git merge` is safer because:
 **Exception:**
 The only time DAG is acceptable is if you use **Squash Merging** exclusively (combining all V2 commits into one giant commit before merging to Master), which "hides" the duplicate history. But this makes debugging specific changes much harder later on.
 **Do you want to see how to handle the "Merge Conflict from Hell" if you are forced to use the Cherry-Pick method?**
+
+---
+
+I apologize for the rendering issue. It seems the complex styling in the previous diagrams caused them to fail.
+
+Here are the **simplified versions** of the diagrams. I have removed the custom styling classes to ensure they render correctly. I have also included **ASCII text versions** as a backup so you can see the logic immediately.
+
+### 1. The Recommended Strategy: Cyclic (Back-Propagation)
+
+This is what `sfdx-hardis` uses. By merging `master` back into `integration`, Git understands that the hotfix is part of the project's history.
+
+#### **Mermaid Diagram**
+
+```mermaid
+graph LR
+    Master[Master Branch] -- 1. Hotfix Commit --> C1(Fix C1)
+    C1 -- 2. Retrofit Merge --> Integration[Integration Branch]
+    Integration -- 3. Project Work --> C2(New Feature)
+    C2 -- 4. Release V2 --> Master
+
+```
+
+#### **ASCII View**
+
+```text
+[Master] --------------------(C1: Hotfix)-------------------------> [Merge V2]
+                                 \                                   /
+                                  \ (Merge)                         /
+                                   \                               /
+[Integration] --------------------(C1: Fix)-----(C2: Feature)-----/
+
+```
+
+* **Result:** When you merge V2, Git sees that `C1` is a **common ancestor**. It skips it. **No Conflict.**
+
+---
+
+### 2. The "Purist" Strategy: DAG (Cherry-Pick)
+
+This is the "Directed Acyclic Graph" approach where you forbid the back-merge. You must copy-paste (cherry-pick) the commit instead.
+
+#### **Mermaid Diagram**
+
+```mermaid
+graph LR
+    Master[Master Branch] -- 1. Hotfix Commit --> C1(Fix C1)
+    
+    subgraph "Parallel History"
+        Integration[Integration Branch] -- 2. Cherry Pick --> C1_Copy(Copy of C1)
+        C1_Copy -- 3. Project Work --> C2(New Feature)
+    end
+    
+    C2 -.->|"4. Merge V2 (RISK!)"| Master
+
+```
+
+#### **ASCII View**
+
+```text
+[Master] --------------------(C1: Hotfix)---------------------------> [CONFLICT?]
+                                                                           ^
+                                                                           |
+[Integration] --(C1': Copy of Fix)-----(C2: Feature)-----------------------|
+
+```
+
+* **The Trap:** Git sees `C1` (on Master) and `C1'` (on Integration) as **two different commits** affecting the same lines of code.
+* **Result:** When you merge V2, Git tries to apply `C1'` on top of `C1`.
+* **Code:** Usually fine (Git figures it out).
+* **Salesforce XML:** **Disaster.** If the XML structure changed (e.g., reordered lines in a Profile), Git cannot align them and throws a conflict on a bug you already fixed.
+
+
+
+### Conclusion
+
+For Salesforce DevOps:
+
+* **Strict DAG** = High maintenance, high risk of "Ghost Conflicts" in XML.
+* **Cyclic (Retrofit)** = Safer, automated, preserves true history.

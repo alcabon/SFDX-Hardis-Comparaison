@@ -540,3 +540,58 @@ To make the strategy valid while respecting DAG using the Retrofit command, you 
 
 **Expert Verdict:**
 Unless you are forced by corporate policy to have a "Pretty Graph" (DAG), **ignore the DAG constraint**. Use the standard `git merge` (Back-Propagation) or `sfdx hardis retrofit` *with the understanding that it is a drift-fixer, not a merge-replacement*. The complexity of managing "Ghost Conflicts" is rarely worth the aesthetic of a straight line in your Git history.
+
+----
+
+You are absolutely right. The "Backward Merge" (Run  Build) creates what we call **"The Git Ladder"** (or less politely, spaghetti).
+
+Visually, your Git graph starts looking like DNA strands twisting around each other, which terrifies strict Gitops purists who love clean, straight lines (DAG).
+
+However, as a Salesforce DevOps expert, here is my final verdict on why **you should embrace the spaghetti.**
+
+### 1. "Spaghetti" vs. "The Ladder"
+
+In a proper BUILD and RUN strategy, it is not random spaghetti. It is a predictable **Ladder Topology**.
+
+* **The Rails:** You have two parallel long-lived branches (`master` and `integration`).
+* **The Rungs:** Every time you Hotfix, you create a "rung" (merge) connecting them.
+
+While it looks "busy," it creates a **Safe Zone**. Every rung represents a **synchronization point** where you guaranteed that "Future V2" is compatible with "Current V1."
+
+### 2. The Cost of "Clean" History (DAG)
+
+If you refuse the spaghetti and enforce a strict DAG (Straight Line):
+
+* **You lose the "Rungs":** You have no guarantee that V2 is compatible with V1 until the very end.
+* **The "Big Bang" Merge:** When you finally merge V2, you hit **3 months of conflicts all at once.**
+* *In Java/JS:* This is annoying but solvable.
+* *In Salesforce (XML):* This is often fatal. Resolving 500+ conflict markers in a 20MB `Profile` or `CustomObject` file is where deployments die.
+
+
+
+### 3. The Compromise: Squash Merging
+
+If your team *hates* the messy history but needs the safety of the backward merge, the industry standard compromise is **Squash Merging**.
+
+**How it works:**
+
+1. **Dev/Hotfix:** Do all the messy merges and "spaghetti" inside your Feature Branches and Pull Requests.
+2. **The PR:** When you merge a Feature Branch into `integration` or `master`, use **"Squash and Merge"** (available in GitHub/GitLab).
+3. **The Result:**
+* **Reality:** You did 50 commits and 3 back-merges.
+* **History:** Git records **1 single clean commit** on the target branch.
+
+
+
+**Why it wins:**
+
+* **Locally:** You have the safety of the "Ladder."
+* **Globally (Master):** You have a clean, straight line (DAG-like appearance) because all the noise was squashed.
+
+### Final Expert Advice
+
+In Salesforce, **Content Integrity > Graph Aesthetics.**
+
+> "It is better to have a messy graph that deploys successfully than a beautiful straight line that fails with `XML Parse Error` on production day."
+
+**Would you like to see the specific GitHub/Azure setting to enforce "Squash Merging" so your main branches stay clean automatically?**

@@ -481,3 +481,62 @@ Here is the precise distinction for a robust DevOps strategy:
 
 **Next Step:**
 Would you like to see the **`.sfdx-hardis.yml` configuration** to safely automate this retrofit command so it ignores noisy metadata (like Profiles) and only catches real drift?
+
+---
+
+You are absolutely right. The statement "The DAG is respected if we use the retrofit command" is **incomplete** and potentially dangerous if you stop there.
+
+While it is true that `sf hardis:org:retrieve:sources:retrofit` avoids creating a Git loop (keeping the graph acyclic), it introduces a subtler problem: **History Disconnection**.
+
+Here is why that statement is not complete and what is missing from the picture.
+
+### 1. The "Photocopy" Problem (State vs. History)
+
+When you use the Retrofit command instead of `git merge`, you are technically respecting the DAG because you aren't drawing a line from `master` to `integration`.
+
+* **The Reality:** The command takes the code from Production and creates a **brand new commit** on `integration`.
+* **The Analogy:** Instead of forwarding the original email (Merge) which keeps the thread history, you printed the email, scanned it, and sent it as a new PDF (Retrofit).
+* **The Result:**
+* **Graph:** Clean (DAG respected).
+* **Content:** Identical.
+* **Git Identity:** **Different.** Git thinks these are two completely unrelated events that just happen to look the same.
+
+
+
+### 2. The "Boomerang" Effect (The Missing Risk)
+
+The statement is incomplete because it ignores the **Future Consequence** (The V2 Release).
+
+If you use the Retrofit command to "respect the DAG," here is what happens 3 months later when you try to deploy your Project (V2):
+
+1. **Master** has `Commit A` (The original hotfix/change).
+2. **Integration** has `Commit B` (The Retrofit commit created by sfdx-hardis).
+3. **The Merge:** You try to merge `integration` into `master`.
+4. **The Conflict:** Git sees `Commit A` and `Commit B` as strangers fighting for the same line of code. It does not know `B` is just a copy of `A`.
+* **Outcome:** You get a **Merge Conflict** on code that is identical.
+
+
+
+### 3. How to make the statement "Complete"
+
+To make the strategy valid while respecting DAG using the Retrofit command, you must add **one specific constraint** to your workflow.
+
+**The Complete Statement:**
+
+> "DAG is respected if you use the retrofit command **AND you exclusively use Squash Merging when promoting to Production.**"
+
+**Why Squash Merging fixes it:**
+
+* When you finally merge `integration` (Build) into `master` (Run), a **Squash Merge** takes all your work (including the "fake" Retrofit commit) and compresses it into one giant new commit.
+* This overwrites the history differences and forces the "New Reality" onto Production, effectively hiding the duplicate commit issue.
+
+### Summary Visualization
+
+| Strategy | Graph Topology | History Integrity | Risk Level |
+| --- | --- | --- | --- |
+| **Git Merge (Cyclic)** | **Loop (Cycle)** | ✅ **Perfect.** Git knows `A` = `A`. | **Low.** Standard practice. |
+| **Retrofit Command (DAG)** | **Straight (DAG)** | ❌ **Broken.** Git sees `A` vs `Copy of A`. | **High.** "Ghost Conflicts" unless you Squash. |
+| **Retrofit + Squash** | **Straight (DAG)** | ⚠️ **Erased.** History is flattened. | **Medium.** Safe but harder to debug. |
+
+**Expert Verdict:**
+Unless you are forced by corporate policy to have a "Pretty Graph" (DAG), **ignore the DAG constraint**. Use the standard `git merge` (Back-Propagation) or `sfdx hardis retrofit` *with the understanding that it is a drift-fixer, not a merge-replacement*. The complexity of managing "Ghost Conflicts" is rarely worth the aesthetic of a straight line in your Git history.

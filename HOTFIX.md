@@ -595,3 +595,86 @@ In Salesforce, **Content Integrity > Graph Aesthetics.**
 > "It is better to have a messy graph that deploys successfully than a beautiful straight line that fails with `XML Parse Error` on production day."
 
 **Would you like to see the specific GitHub/Azure setting to enforce "Squash Merging" so your main branches stay clean automatically?**
+
+---
+
+Use squash merging to maintain a clean history. It is the "Golden Compromise" for Salesforce DevOps: you get the safety of the back-merge (synchronization) locally, but the cleanliness of a DAG on your main branches.
+
+### 1. The Strategy: "Messy in the Kitchen, Clean on the Plate"
+
+* **The Kitchen (Feature Branches):** Developers do whatever they need—merge `master` backwards, resolve conflicts, create "spaghetti" commits (`fix typo`, `oops`, `try again`).
+* **The Plate (Master/Integration):** When the Pull Request is merged, GitHub takes all those 50 commits and **squashes** them into **1 single commit**.
+* **The Result:** Your `master` branch history looks like a perfect straight line of features, not a tangled web of merges.
+
+### 2. How to Enforce Squash Merging in GitHub
+
+You can configure your repository to **only** allow Squash Merging, preventing developers from accidentally creating messy merge commits.
+
+#### **Step 1: Go to Repository Settings**
+
+1. Navigate to your repository on GitHub.
+2. Click **Settings** (tab at the top).
+3. Scroll down to the **"Pull Requests"** section.
+
+#### **Step 2: Configure Merge Types**
+
+You will see three options. Configure them exactly like this:
+
+* **[ ] Allow merge commits**  **UNCHECK THIS.**
+* *Why:* This disables the standard "spaghetti" merge that preserves all individual commits.
+
+
+* **[x] Allow squash merging**  **CHECK THIS.**
+* *Why:* This forces the "clean single commit" strategy.
+
+
+* **[ ] Allow rebase merging**  **UNCHECK THIS.**
+* *Why:* Rebase is dangerous for Salesforce XML because it rewrites history and can break shared branches.
+
+
+
+#### **Step 3: (Optional but Recommended) Default to Squash**
+
+Below the checkboxes, look for a dropdown setting called **"Default to new pull request title and description"**.
+
+* Set it to: **"Default to pull request title and description"**.
+* *Why:* When a developer clicks "Squash and Merge," the commit message will automatically be the nice, clean title of the PR (e.g., `Feat: Added new Opportunity triggers`) instead of a list of 50 temp commit messages.
+
+### 3. What the History Looks Like (Before vs. After)
+
+**Without Squash (Standard Merge):**
+
+```text
+* Merge pull request #42 from feat/opp-trigger
+|\  
+| * Fix typo in trigger
+| * Merge branch 'master' into feat/opp-trigger (Back-merge)
+| * Added initial trigger logic
+| * WIP: broken test
+|/  
+* Previous Commit
+
+```
+
+* *Verdict:* Messy. Hard to read.
+
+**With Squash Enforcement:**
+
+```text
+* Feat: Added new Opportunity triggers (#42)
+* Previous Commit
+
+```
+
+* *Verdict:* Clean. Linear. The "Back-merge" and "WIP" commits are gone from the history, but the **code changes are preserved**.
+
+### 4. Expert Note for `sfdx-hardis`
+
+If you use `sfdx-hardis` to automate your deployments, Squash Merging works perfectly.
+
+* **Release Notes:** `sfdx-hardis` generates release notes based on PR titles. Because Squash Merging forces one commit per PR, your release notes become incredibly clean and readable for business users.
+* **Rollback:** If a feature breaks Production, you only have to revert **1 commit** (the squashed one) instead of hunting down 15 partial commits.
+
+### Next Step
+
+Would you like the **GitHub Action YAML** snippet that automatically validates PR titles (e.g., enforcing "Conventional Commits" like `feat:`, `fix:`) to ensure your squashed history is not just clean, but standardized?

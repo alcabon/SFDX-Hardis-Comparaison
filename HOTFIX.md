@@ -326,3 +326,45 @@ For Salesforce DevOps:
 
 * **Strict DAG** = High maintenance, high risk of "Ghost Conflicts" in XML.
 * **Cyclic (Retrofit)** = Safer, automated, preserves true history.
+
+---
+
+Yes, I can access the page.
+
+It documents the command `sf hardis:org:retrieve:sources:retrofit`.
+
+This command reveals an important nuance in the `sfdx-hardis` philosophy: **"Retrofit" applies to both Git Merges AND Drift Management.**
+
+While our previous discussion focused on the "Git Workflow" (merging branches), this specific command is designed for the **"Reality Check"** scenario—when changes happen directly in the Production Org (Shadow IT / Hotfixes done without Git) and need to be saved back into the repository.
+
+### What this command actually does
+
+Unlike the standard `git merge` we discussed (which assumes your code is already in Git), this command:
+
+1. **Connects to the Org** (usually Production).
+2. **Scans for Metadata** that exists in the Org but **not** in your local Git branch.
+3. **Retrieves** those "rogue" changes (Drift).
+4. **Creates a Pull Request** to merge them back into your target branch (e.g., `integration` or `preprod`).
+
+### The "Two Types" of Retrofit
+
+To be a complete expert, you should distinguish between these two scenarios in your strategy:
+
+| Feature | **Git Retrofit** (The ideal way) | **Org Retrofit** (The command you linked) |
+| --- | --- | --- |
+| **Scenario** | You fixed a bug in VSCode and pushed it to `master`. | An Admin fixed a bug directly in the Salesforce Setup UI (or a user created a Report/ListView). |
+| **Action** | `git merge master` (into integration) | `sf hardis:org:retrieve:sources:retrofit` |
+| **Direction** | Git Branch  Git Branch | Production Org  Git Branch |
+| **Goal** | Keep branches synchronized. | **eliminate Drift** (bring Shadow IT back into the fold). |
+
+### Why this specific command is smart
+
+It includes a **Default List of "Drifting" Metadata** (things Admins often tweak manually):
+
+* `Report` / `Dashboard` (often created by users)
+* `CustomField` / `ValidationRule` (urgent hotfixes)
+* `ListView` / `EmailTemplate`
+* `PermissionSet`
+
+**Strategic Advice:**
+If you enforce a strict **DAG** (no back-merges), this command is actually your "Escape Hatch." Instead of merging `master` backwards, you can run this command to "Fetch the reality of Prod" and inject it into your `integration` branch as a new commit, effectively "Replaying" the state without breaking your DAG graph.

@@ -60,3 +60,67 @@ Yes — that's exactly the pragmatic compromise most teams without Gearset land 
 This setup is genuinely viable and is, in practice, how a lot of mid-size Salesforce teams run permission changes safely without buying a tool like Gearset — a written access-change ledger is good security/audit hygiene anyway, independent of which rollback strategy you use. The cost isn't engineering hours, it's **discipline**: every Profile/PermissionSet change needs a human to stop, document, and double-check, every single time, including during an incident when people are most tempted to skip steps.
 
 Where this stops scaling: high release frequency, multiple parallel teams touching the same profiles, or any setup without a dedicated release-manager role to own Stage 2–4 consistently. At that point the manual checkpoints either get skipped under pressure or become the new bottleneck — which is precisely the gap Gearset (and similar tools) are selling against: not "can a human do this," but "can a human reliably do this every time, fast, at 2am, without a dedicated process owner in the room."
+
+---
+
+Here's the good news: this is exactly the kind of problem that's *cheaper* to solve than the rest of the rollback discussion, because there's a shortcut available specifically for Profiles/PermissionSets that doesn't exist for most other metadata — you can sidestep the whole "is the XML additive or not" ambiguity by not reading XML at all. Query the **actual resulting permission state directly from the org via SOQL**, before and after deployment. That gives you ground truth, not deploy instructions.
+
+## The core trick
+
+Every Profile has a shadow `PermissionSet` record (`IsOwnedByProfile = true`), and `FieldPermissions`/`ObjectPermissions` both key off `ParentId` pointing at that PermissionSet — the ParentId field refers to the ID of the parent PermissionSet, not directly to a profile; each profile in Salesforce is associated with a PermissionSet in the backend. So a single SOQL query gives you the *effective* permission table for Profiles and PermissionSets in one normalized format:
+
+```sql
+SELECT Parent.Name, Parent.IsOwnedByProfile, SobjectType, Field, PermissionsRead, PermissionsEdit
+FROM FieldPermissions
+WHERE Parent.Name IN ('Sales_User','Custom_Service_PermSet')
+```
+
+This is read directly from the org's live state — it doesn't care whether the deployed XML was sparse or additive, because it's reporting the *outcome*, not the *instruction*.
+
+## What to query for a full snapshot
+
+| Object | Captures | Notes |
+|---|---|---|
+| `FieldPermissions` | Field-level read/edit, per Profile/PermissionSet | Core of the FLS picture |
+| `ObjectPermissions` | CRUD + ViewAll/ModifyAll, per object | Core of the object-access picture |
+| `PermissionSet` (`IsOwnedByProfile`, `Profile.Name`) | Maps Profile ↔ shadow PermissionSet, distinguishes real PermissionSets from Profile-backed ones | Needed to resolve names |
+| `SetupEntityAccess` | Apex class/page, custom permission, tab access | Covers what FieldPermissions/ObjectPermissions don't |
+| `PermissionSetGroupComponent` / `MutingPermissionSet` | Group composition and subtracted permissions | Needed if you use PermissionSetGroups |
+| `PermissionSetAssignment` | Who's actually assigned what | Useful for "who's affected" reporting, not for the diff itself |
+
+## Architecture
+
+```
+Pre-deploy job:  query all 6 objects, scoped to the Profiles/PermissionSets
+                 touched by this deployment's package.xml
+                 → normalize to flat rows (Parent, Type, Object/Field, PermissionType, Value)
+                 → store as JSON artifact (small — KB, not MB, unlike a full metadata retrieve)
+
+Deploy runs.
+
+Post-deploy job: re-run the same query
+                 → diff against the pre-deploy snapshot
+                 → post a markdown table to the PR/run summary: "Added / Removed / Unchanged" per row
+```
+
+Because this only captures structured rows, not XML, storage is trivial (a GH Actions artifact or even a row in a "snapshots" branch works fine — nowhere near the storage/retention problem a full org metadata retrieve has).
+
+## Capability tiers
+
+| Tier | What it does | Effort | What it solves |
+|---|---|---|---|
+| **1 — Verification only** | Snapshot before/after, diff, post as a report a human reviews before signing off | **3–5 days** | Replaces hours of manual cross-checking with a single readable table — directly answers "what actually changed in live access" |
+| **2 — Drift detector** | Run the same snapshot+diff on a schedule against Production (not tied to a deployment) | **+1–2 days** on top of Tier 1 | Catches manual Setup-UI permission changes between deployments — something the git-based rollback approach can never see |
+| **3 — Auto-generated rollback patch** | Take the pre-deploy snapshot as the rollback target; for every row that changed, programmatically emit the correct `<fieldPermissions>`/`<objectPermissions>` block (including explicit `false` entries) into a rollback package, then deploy it | **+1–2 weeks** | This is the one that actually closes the "omission ≠ revoke" gap from earlier — because you're generating explicit revoke instructions from a real diff, not hoping a stale file does it |
+
+Tier 3 is the meaningful upgrade: it turns this from "a report a human reads" into "a tool that produces a deployment-ready rollback package," which is functionally close to what Gearset's engine is doing for this specific metadata family — just narrower in scope (Profiles/PermissionSets only, not the other 49 problem-analyzer cases).
+
+## What this approach does *not* cover
+
+Be aware of the boundary — these objects only model permission *grants*, not every Profile/PermissionSet sub-element:
+- Login hours/IP ranges, layout assignments, record-type default/visibility, app/tab visibility — these live in the Profile XML but aren't exposed through `FieldPermissions`/`ObjectPermissions`/`SetupEntityAccess`. You'd still need XML parsing (or Tooling API's `Profile`/`PermissionSet` metadata-describe equivalents) for those, on top of this.
+- Large orgs can return very large result sets — scope the query to only the Profiles/PermissionSets in the current deployment's package.xml, not the whole org, to keep it fast and within API call budgets.
+
+## Recommendation
+
+Build Tier 1 first — it's the highest value-per-effort item in this entire thread. A week of work replaces the most exhausting, error-prone part of your manual process (eyeballing field × profile × permission set combinations) with a single diff table, and it's useful on *every* deployment, not just ones that need a rollback. Tier 3 is worth doing once Tier 1 proves its value and you've confirmed the team actually needs automated rollback packages rather than "just tell me what to check."

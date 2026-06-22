@@ -1,3 +1,6 @@
+
+https://salesforce.stackexchange.com/questions/417618/rollbackback-promotechanges-through-sfdx-git-delta-deploy
+
 But the technique implied by the title — using `sfdx-git-delta` to both "promote" and "rollback" — matches exactly the bidirectional trick I described earlier: `sgd` doesn't care which ref is "before" and which is "after," so generating a rollback package is just calling it with `--from` and `--to` reversed relative to your normal forward deploy. That's a real, well-documented capability of the tool, not a hack — and it's a good anchor for the comparison you're asking for.
 
 Here's the breakdown, decomposing rollback into its actual components rather than treating it as one feature:
